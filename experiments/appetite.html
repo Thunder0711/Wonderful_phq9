@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --ac-mint: #A8D5BA; --ac-cream: #FDFaf5; --ac-brown: #5B4636;
+            --ac-sand: #E6D5B8; --accent-orange: #FFB37E;
+        }
+        body {
+            font-family: -apple-system, sans-serif; background-color: #fff;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px; margin: 0; color: var(--ac-brown);
+        }
+
+        /* 标题排版 */
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h2 { margin: 0; font-size: 1.4rem; color: var(--ac-brown); }
+        .header p { margin: 12px 0; font-size: 0.95rem; color: #777; line-height: 1.5; }
+
+        /* 频率选择按钮区域 */
+        .option-container {
+            display: flex; flex-direction: column; gap: 12px;
+            width: 100%; max-width: 360px;
+        }
+
+        .option-btn {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 18px 25px; background: var(--ac-cream);
+            border: 2px solid var(--ac-sand); border-radius: 20px;
+            cursor: pointer; transition: all 0.2s ease;
+            font-size: 1.05rem; font-weight: 600; color: var(--ac-brown);
+        }
+
+        /* 选中状态：动森绿 */
+        .option-btn.active {
+            background: var(--ac-mint); border-color: var(--ac-mint);
+            color: white; transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(168, 213, 186, 0.4);
+        }
+
+        .option-score {
+            font-size: 0.8rem; background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px; border-radius: 8px;
+        }
+
+        .submit-btn {
+            margin-top: 40px; width: 100%; max-width: 360px; padding: 16px;
+            background: var(--ac-brown); color: white; border: none;
+            border-radius: 15px; font-size: 1.1rem; font-weight: bold;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .submit-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>食欲与进食状态评估</h2>
+        <p>过去两周，您出现<b>没有食欲</b>或者<b>暴饮暴食</b>的频率是多少？</p>
+    </div>
+
+    <div class="option-container">
+        <div class="option-btn" onclick="selectScore(0, this)">
+            <span>0 - 完全没有</span>
+            <span class="option-score">0分</span>
+        </div>
+        <div class="option-btn" onclick="selectScore(1, this)">
+            <span>1 - 有几天</span>
+            <span class="option-score">1分</span>
+        </div>
+        <div class="option-btn" onclick="selectScore(2, this)">
+            <span>2 - 一半以上时间</span>
+            <span class="option-score">2分</span>
+        </div>
+        <div class="option-btn" onclick="selectScore(3, this)">
+            <span>3 - 几乎天天</span>
+            <span class="option-score">3分</span>
+        </div>
+    </div>
+
+    <button id="submitBtn" class="submit-btn" disabled onclick="doSubmit()">完成评估</button>
+
+<script>
+    let selectedScore = null;
+
+    function selectScore(score, element) {
+        selectedScore = score;
+        // 视觉切换
+        document.querySelectorAll('.option-btn').forEach(btn => btn.classList.remove('active'));
+        element.classList.add('active');
+        // 启用提交
+        document.getElementById('submitBtn').disabled = false;
+    }
+
+    function doSubmit() {
+        if (selectedScore !== null) {
+            // 向父网页发送 EID 和 分数
+            window.parent.postMessage({
+                type: 'experiment_result',
+                eid: 'appetite',
+                score: selectedScore
+            }, '*');
+        }
+    }
+</script>
+</body>
+</html>

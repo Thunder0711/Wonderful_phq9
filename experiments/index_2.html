@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHQ-9 智能测评系统 - 助手阿柴版</title>
+    <style>
+        /* --- 1. 风格主题：参考动森与 Apple 健康 --- */
+        :root { 
+            --ac-mint: #A8D5BA; 
+            --ac-cream: #FDFaf5; 
+            --ac-brown: #5B4636; 
+            --ac-sand: #E6D5B8; 
+            --apple-blur: blur(25px); 
+        }
+
+        body { 
+            margin: 0; 
+            background-color: var(--ac-sand); 
+            font-family: -apple-system, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+
+        .main-container { 
+            width: 95vw; 
+            max-width: 800px; 
+            height: 85vh; 
+            background: var(--ac-cream); 
+            border: 6px solid var(--ac-mint); 
+            border-radius: 40px; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: visible; /* 允许阿柴超出边框 */
+            position: relative; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1); 
+        }
+
+        /* --- 2. 阿柴立绘布局 --- */
+        .shiba-container {
+            position: absolute;
+            top: -85px; 
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #achai-img {
+            width: 100%;
+            height: auto;
+            transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+        }
+
+        .shiba-fading { opacity: 0.3; transform: scale(0.9); }
+
+        /* --- 3. 聊天窗口样式 --- */
+        #chat-window { flex: 1; overflow-y: auto; padding: 25px; display: flex; flex-direction: column; gap: 18px; margin-top: 25px; }
+        .msg { padding: 14px 20px; border-radius: 22px; max-width: 80%; line-height: 1.6; font-size: 15px; position: relative; }
+        .bot { background: var(--ac-mint); align-self: flex-start; color: white; border-bottom-left-radius: 4px; }
+        .user { background: #EEE; align-self: flex-end; color: var(--ac-brown); border-bottom-right-radius: 4px; }
+
+        /* 正在输入动效 */
+        .typing-bubble { display: none; align-self: flex-start; background: #E0E0E0; padding: 12px 20px; border-radius: 20px; margin-left: 10px; margin-top: -5px; }
+        .dot { display: inline-block; width: 5px; height: 5px; background: #888; border-radius: 50%; margin-right: 4px; animation: bounce 1.4s infinite ease-in-out both; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+
+        /* 输入区域 */
+        .input-area { padding: 20px; display: flex; gap: 12px; background: white; border-top: 2px solid #F0EDE5; }
+        #user-input { flex: 1; padding: 12px 18px; border: 2px solid var(--ac-mint); border-radius: 15px; outline: none; }
+
+        /* 弹窗与报告逻辑样式 (保持原样) */
+        #modal-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(255, 255, 255, 0.4); backdrop-filter: var(--apple-blur); justify-content: center; align-items: center; }
+        .modal-card { width: 90%; max-width: 800px; height: 600px; background: white; border-radius: 35px; border: 6px solid var(--ac-mint); overflow: hidden; }
+        #report-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; padding: 15px; overflow-y: auto; }
+        .report-card { max-width: 550px; margin: 0 auto; background: white; border-radius: 30px; padding: 25px; border: 2px solid #FFD4A8; }
+        .choice-container { display: flex; gap: 10px; margin-top: -10px; margin-left: 10px; }
+        .chat-choice-btn { padding: 8px 18px; border-radius: 15px; border: 2px solid var(--ac-mint); background: white; color: var(--ac-mint); cursor: pointer; font-weight: bold; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="shiba-container">
+            <img id="achai-img" src="shiba.png" alt="阿柴助手">
+        </div>
+
+        <div id="chat-window">
+            <div class="msg bot">你好，我是你的心理助手汪多福。测评完成后我会在这里为你生成报告。</div>
+        </div>
+        
+        <div id="typing-indicator" class="typing-bubble">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="输入消息..." onkeydown="if(event.key==='Enter') handleUserInput()">
+            <button onclick="handleUserInput()" style="background:var(--ac-mint); color:white; border:none; padding:10px 20px; border-radius:12px; cursor:pointer; font-weight:bold;">发送</button>
+        </div>
+    </div>
+
+    <div id="modal-overlay"><div class="modal-card"><iframe id="exp-iframe" style="width:100%; height:100%; border:none;" src=""></iframe></div></div>
+
+    <div id="report-overlay"><div class="report-card"><h3>✨ 测评报告已生成</h3><button onclick="location.reload()">重新测试</button></div></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // --- 1. 配置与状态 ---
+        const API_KEY = 'app-PrrOSsxgPyJG87TcLavuT69F';
+        const BASE_URL = 'https://ai.mindparse.cn/v1';
+        const SHIBA_EXPRESSIONS = {
+            idle: 'shiba.png',
+            thinking: 'shiba_thinking.png',
+            happy: 'shiba_happy.png'
+        };
+
+        let conversationId = ""; 
+        let globalScores = {};
+        let idleTimer;
+
+        // --- 2. 阿柴表情控制 ---
+        function changeShibaState(state) {
+            const img = document.getElementById('achai-img');
+            const newSrc = SHIBA_EXPRESSIONS[state];
+            if (!img || img.src.includes(newSrc)) return;
+
+            img.classList.add('shiba-fading');
+            setTimeout(() => {
+                img.src = newSrc;
+                img.classList.remove('shiba-fading');
+            }, 250);
+        }
+
+        // --- 3. 核心聊天逻辑 ---
+        async function handleUserInput() {
+            const inputEl = document.getElementById('user-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            inputEl.value = "";
+            
+            // 发送时变为“思考”
+            changeShibaState('thinking');
+            await sendMessageToDify(text);
+        }
+
+        async function sendMessageToDify(query, isHidden = false) {
+            if (!isHidden) showTyping(true);
+            try {
+                const response = await fetch(`${BASE_URL}/chat-messages`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ inputs: {}, query: query, response_mode: "blocking", user: "tester_001", conversation_id: conversationId })
+                });
+                const data = await response.json();
+                conversationId = data.conversation_id;
+                showTyping(false);
+                const answer = data.answer;
+
+                // 回复时变为“开心”
+                changeShibaState('happy');
+                
+                // 处理报告数据
+                if (answer.includes('[REPORT_DATA]')) {
+                    const dataStr = answer.match(/\[REPORT_DATA\]\s*(.*)/)[1];
+                    renderReport(dataStr);
+                    return;
+                }
+
+                appendMessage('bot', answer.replace(/\[EID:\s*(\w+)\]/g, "").trim());
+                if (answer.includes('[EID:')) {
+                    const match = answer.match(/\[EID:\s*(\w+)\]/);
+                    if (match) appendChoiceButtons(match[1]);
+                }
+
+                // 3.5秒后自动变回待机
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => changeShibaState('idle'), 3500);
+
+            } catch (e) { 
+                showTyping(false); 
+                changeShibaState('idle');
+                console.error(e); 
+            }
+        }
+
+        // --- 4. 行为实验返回监听 (修复点) ---
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'experiment_result') {
+                console.log("收到子页面数据:", e.data);
+                
+                // 1. 隐藏弹窗并给予阿柴正向反馈
+                document.getElementById('modal-overlay').style.display = 'none';
+                changeShibaState('happy');
+
+                // 2. 将数据回传给 Dify 驱动逻辑
+                const dimMap = { 'fish': 1, 'depression': 2, 'sleep': 3, 'energy': 4, 'appetite': 5, 'attention': 7 };
+                sendMessageToDify(`[EXP_DATA] d${dimMap[e.data.eid] || 1}_score:${e.data.score}`, true);
+                
+                setTimeout(() => changeShibaState('idle'), 3000);
+            }
+        });
+
+        // --- 5. 辅助 UI 函数 ---
+        function showTyping(show) {
+            const indicator = document.getElementById('typing-indicator');
+            indicator.style.display = show ? 'block' : 'none';
+            if (show) document.getElementById('chat-window').scrollTop = 10000;
+        }
+
+        function appendMessage(role, text) {
+            const chat = document.getElementById('chat-window');
+            const div = document.createElement('div');
+            div.className = `msg ${role}`;
+            div.innerText = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function appendChoiceButtons(eid) {
+            const chat = document.getElementById('chat-window');
+            const container = document.createElement('div');
+            container.className = 'choice-container';
+            container.innerHTML = `<button class="chat-choice-btn" onclick="openExp('${eid}', this)">是，开始</button><button class="chat-choice-btn" style="border-color:#CCC; color:#999;" onclick="skipExp('${eid}', this)">否，暂不</button>`;
+            chat.appendChild(container);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function openExp(eid, btn) { 
+            btn.parentElement.remove(); 
+            document.getElementById('modal-overlay').style.display = 'flex'; 
+            document.getElementById('exp-iframe').src = `experiments/${eid}.html`; 
+        }
+
+        function skipExp(eid, btn) { 
+            btn.parentElement.remove(); 
+            const dimMap = { 'fish': 1, 'depression': 2, 'sleep': 3, 'energy': 4, 'appetite': 5, 'attention': 7 }; 
+            sendMessageToDify(`[EXP_DATA] d${dimMap[eid] || 1}_score:null`, true); 
+        }
+
+        // 报告渲染逻辑 renderReport() 等请保持你之前的完整实现...
+        // --- 核心：报告与解读逻辑 ---
+        function renderReport(dataStr) {
+            try {
+                const jsonPart = dataStr.match(/\{.*\}/)[0];
+                globalScores = JSON.parse(jsonPart.replace(/\\"/g, '"'));
+            } catch (e) { console.error("解析失败", e); }
+
+            const total = Object.values(globalScores).reduce((a, b) => a + (parseInt(b) || 0), 0);
+            document.getElementById('total-score').innerText = total;
+            document.getElementById('severity-text').innerText = total >= 15 ? "重度" : total >= 10 ? "中度" : total >= 5 ? "轻度" : "无";
+
+            // 热力图逻辑
+            document.getElementById('pt-head').style.display = globalScores.d7 >= 2 ? 'block' : 'none';
+            document.getElementById('pt-chest').style.display = globalScores.d4 >= 2 ? 'block' : 'none';
+            document.getElementById('pt-stomach').style.display = globalScores.d5 >= 2 ? 'block' : 'none';
+
+            drawRadar(globalScores);
+            document.getElementById('report-overlay').style.display = 'block';
+            appendMessage('bot', "测评报告已生成，点击下方按钮查看详情。");
+        }
+
+        // --- 动态生成解读与练习内容 ---
+        function showDetail(type) {
+            const panel = document.getElementById('info-panel');
+            panel.style.display = 'block';
+            let content = "";
+            const s = globalScores;
+
+            if (type === 'interpret') {
+                content = `<b>🔍 维度解读：</b><br>`;
+                if (s.d1 >= 2 || s.d2 >= 2) content += "• 核心情绪显著低落，可能正经历较深的职业倦怠或快感缺失。<br>";
+                if (s.d3 >= 2 || s.d4 >= 2) content += "• 躯体化症状明显，能量缺口较大，建议优先关注睡眠节律。<br>";
+                if (s.d7 >= 2) content += "• 认知负载过重，导致专注力下降，这不是懒惰而是大脑在求救。<br>";
+                if (!content.includes('•')) content = "您的各维度表现平稳，目前处于健康的心理弹性范围内。";
+            } else {
+                content = `<b>🌱 练习建议：</b><br>`;
+                if (s.d1 >= 2) content += "• <b>行为激活</b>：每天尝试一件只需 5 分钟的微小爱好。<br>";
+                if (s.d3 >= 2) content += "• <b>睡眠卫生</b>：睡前 1 小时放下电子设备，尝试 4-7-8 呼吸法。<br>";
+                if (s.d7 >= 2) content += "• <b>番茄钟法</b>：将任务拆解为 20 分钟专注 + 5 分钟完全放空。<br>";
+                if (s.d9 > 0) content += "• <b style='color:red;'>安全第一</b>：建议联系专业心理热线或寻求线下门诊协助。<br>";
+                if (!content.includes('•')) content = "继续保持当前的规律生活，每周进行一次 30 分钟的户外冥想。";
+            }
+            panel.innerHTML = content;
+        }
+
+        function drawRadar(s) {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            if (window.myChart) window.myChart.destroy();
+            window.myChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['兴趣', '情绪', '睡眠', '精力', '食欲', '认知'],
+                    datasets: [{ data: [s.d1||0, s.d2||0, s.d3||0, s.d4||0, s.d5||0, (s.d7||0+s.d8||0)/2], backgroundColor: 'rgba(74,144,226,0.2)', borderColor: '#4A90E2', borderWidth: 2, pointRadius: 0 }]
+                },
+                options: { scales: { r: { min: 0, max: 3, ticks: { display: false } } }, plugins: { legend: { display: false } } }
+            });
+        }
+    </script>
+</body>
+</html>

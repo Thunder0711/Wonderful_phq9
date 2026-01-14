@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHQ-9 智能测评系统 - 助手阿柴版</title>
+    <style>
+        /* --- 1. 动森与 Apple 健康风格主题 --- */
+        :root { 
+            --ac-mint: #A8D5BA; 
+            --ac-cream: #FDFaf5; 
+            --ac-brown: #5B4636; 
+            --ac-sand: #E6D5B8; 
+            --apple-blur: blur(25px); 
+        }
+
+        body { 
+            margin: 0; 
+            background-color: var(--ac-sand); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+
+        /* --- 2. 主容器与阿柴布局 --- */
+        .main-container { 
+            width: 95vw; 
+            max-width: 800px; 
+            height: 85vh; 
+            background: var(--ac-cream); 
+            border: 6px solid var(--ac-mint); 
+            border-radius: 40px; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: visible; /* 改为 visible 让阿柴可以超出边界 */
+            position: relative; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1); 
+        }
+
+        /* 阿柴悬浮容器 */
+        .shiba-character-box {
+            position: absolute;
+            top: -85px; /* 向上偏移，使其趴在边框上 */
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #achai-img {
+            width: 100%;
+            height: auto;
+            transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+        }
+
+        /* 状态切换过渡效果 */
+        .shiba-fading { opacity: 0.3; transform: scale(0.9) rotate(-5deg); }
+
+        /* --- 3. 聊天窗口样式 --- */
+        #chat-window { flex: 1; overflow-y: auto; padding: 25px; display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
+        .msg { padding: 14px 20px; border-radius: 22px; max-width: 80%; line-height: 1.6; font-size: 15px; position: relative; transition: all 0.3s ease; }
+        .bot { background: var(--ac-mint); align-self: flex-start; color: white; border-bottom-left-radius: 4px; box-shadow: 0 4px 12px rgba(168, 213, 186, 0.3); }
+        .user { background: #EEE; align-self: flex-end; color: var(--ac-brown); border-bottom-right-radius: 4px; }
+
+        /* 输入区域 */
+        .input-area { padding: 20px; display: flex; gap: 12px; background: white; border-top: 2px solid #F0EDE5; }
+        #user-input { flex: 1; padding: 12px 18px; border: 2px solid var(--ac-mint); border-radius: 15px; outline: none; }
+
+        /* 正在输入动效 */
+        .typing-bubble { display: none; align-self: flex-start; background: #E0E0E0; padding: 10px 18px; border-radius: 20px; margin-left: 25px; margin-bottom: 10px; }
+        .dot { display: inline-block; width: 5px; height: 5px; background: #888; border-radius: 50%; margin-right: 4px; animation: bounce 1.4s infinite ease-in-out both; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+
+        /* 隐藏的原有组件样式保持不变... */
+        #report-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; padding: 15px; overflow-y: auto; }
+        .report-card { max-width: 550px; margin: 0 auto; background: white; border-radius: 30px; padding: 25px; border: 2px solid #FFD4A8; }
+        #modal-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(255, 255, 255, 0.4); backdrop-filter: var(--apple-blur); justify-content: center; align-items: center; }
+        .modal-card { width: 90%; max-width: 800px; height: 600px; background: white; border-radius: 35px; border: 6px solid var(--ac-mint); overflow: hidden; }
+        .choice-container { display: flex; gap: 10px; margin-top: -5px; margin-left: 25px; }
+        .chat-choice-btn { padding: 8px 18px; border-radius: 15px; border: 2px solid var(--ac-mint); background: white; color: var(--ac-mint); cursor: pointer; font-weight: bold; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="shiba-character-box">
+            <img id="achai-img" src="shiba.png" alt="助手阿柴">
+        </div>
+
+        <div id="chat-window">
+            <div class="msg bot">你好，我是你的心理助手汪多福。测评完成后我会在这里为你生成心情报告。</div>
+        </div>
+        
+        <div id="typing-indicator" class="typing-bubble">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="和汪多福聊聊..." onkeydown="if(event.key==='Enter') handleUserInput()">
+            <button onclick="handleUserInput()" style="background:var(--ac-mint); color:white; border:none; padding:10px 20px; border-radius:12px; cursor:pointer; font-weight:bold;">发送</button>
+        </div>
+    </div>
+
+    <div id="modal-overlay"><div class="modal-card"><iframe id="exp-iframe" style="width:100%; height:100%; border:none;" src=""></iframe></div></div>
+    <div id="report-overlay"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // --- 1. 配置信息 ---
+        const API_KEY = 'app-PrrOSsxgPyJG87TcLavuT69F';
+        const BASE_URL = 'https://ai.mindparse.cn/v1';
+        const SHIBA_EXPRESSIONS = {
+            idle: 'shiba.png',       // 待机
+            thinking: 'shiba_thinking.png', // 思考中
+            happy: 'shiba_happy.png'        // 回复时
+        };
+
+        let conversationId = ""; 
+        let globalScores = {};
+        let idleTimer;
+
+        // --- 2. 阿柴表情控制逻辑 ---
+        function changeShibaState(state) {
+            const img = document.getElementById('achai-img');
+            const newSrc = SHIBA_EXPRESSIONS[state];
+            if (!img || img.src.includes(newSrc)) return;
+
+            img.classList.add('shiba-fading');
+            setTimeout(() => {
+                img.src = newSrc;
+                img.classList.remove('shiba-fading');
+                // 如果是变回待机，可以加个微小的弹跳效果
+                if(state === 'idle') img.style.transform = 'scale(1.05)';
+                setTimeout(()=> img.style.transform = 'scale(1)', 200);
+            }, 250);
+        }
+
+        // --- 3. 核心对话逻辑 ---
+        async function handleUserInput() {
+            const inputEl = document.getElementById('user-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            inputEl.value = "";
+            
+            // 触发：阿柴进入托腮思考状态
+            changeShibaState('thinking');
+            await sendMessageToDify(text);
+        }
+
+        async function sendMessageToDify(query, isHidden = false) {
+            if (!isHidden) showTyping(true);
+            try {
+                const response = await fetch(`${BASE_URL}/chat-messages`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ inputs: {}, query: query, response_mode: "blocking", user: "tester_001", conversation_id: conversationId })
+                });
+                const data = await response.json();
+                conversationId = data.conversation_id;
+                showTyping(false);
+                const answer = data.answer;
+
+                // 核心：处理报告数据逻辑
+                if (answer.includes('[REPORT_DATA]')) {
+                    const dataStr = answer.match(/\[REPORT_DATA\]\s*(.*)/)[1];
+                    renderReport(dataStr);
+                    changeShibaState('happy');
+                    return;
+                }
+
+                // 正常回复：触发阿柴开心的反馈
+                changeShibaState('happy');
+                appendMessage('bot', answer.replace(/\[EID:\s*(\w+)\]/g, "").trim());
+                
+                if (answer.includes('[EID:')) {
+                    const match = answer.match(/\[EID:\s*(\w+)\]/);
+                    if (match) appendChoiceButtons(match[1]);
+                }
+
+                // 3秒后自动变回待机倾听状态
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => changeShibaState('idle'), 3500);
+
+            } catch (e) { 
+                showTyping(false); 
+                changeShibaState('idle');
+                console.error(e); 
+            }
+        }
+
+        // --- 4. 辅助 UI 函数 (保持与父网页一致) ---
+        function showTyping(show) {
+            const indicator = document.getElementById('typing-indicator');
+            indicator.style.display = show ? 'block' : 'none';
+            if (show) {
+                const chat = document.getElementById('chat-window');
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        function appendMessage(role, text) {
+            const chat = document.getElementById('chat-window');
+            const div = document.createElement('div');
+            div.className = `msg ${role}`;
+            div.innerText = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function appendChoiceButtons(eid) {
+            const chat = document.getElementById('chat-window');
+            const container = document.createElement('div');
+            container.className = 'choice-container';
+            container.innerHTML = `<button class="chat-choice-btn" onclick="openExp('${eid}', this)">是，开始</button><button class="chat-choice-btn" style="border-color:#CCC; color:#999;" onclick="skipExp('${eid}', this)">否，暂不</button>`;
+            chat.appendChild(container);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // ... 实验与报告渲染函数 renderReport, drawRadar 等保持原样即可 ...
+        function openExp(eid, btn) { btn.parentElement.remove(); document.getElementById('modal-overlay').style.display = 'flex'; document.getElementById('exp-iframe').src = `experiments/${eid}.html`; }
+        function skipExp(eid, btn) { btn.parentElement.remove(); sendMessageToDify(`[EXP_DATA] skip`, true); }
+
+    </script>
+</body>
+</html>

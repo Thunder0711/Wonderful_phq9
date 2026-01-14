@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --ac-mint: #A8D5BA; --ac-cream: #FDFaf5; --ac-brown: #5B4636;
+            --ac-sand: #E6D5B8; --accent-blue: #78A2CC;
+        }
+        body {
+            font-family: -apple-system, sans-serif; background-color: #fff;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px; margin: 0; color: var(--ac-brown); overflow: hidden;
+        }
+
+        .header { text-align: center; margin-bottom: 25px; }
+        .header h2 { margin: 0; font-size: 1.3rem; }
+        .header p { margin: 8px 0; font-size: 0.85rem; color: #777; line-height: 1.4; }
+
+        /* 舒尔特方格布局 */
+        .grid-container {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            width: 280px; height: 280px; margin: 10px auto;
+        }
+
+        .grid-item {
+            background: var(--ac-cream); border: 2px solid var(--ac-sand);
+            border-radius: 15px; display: flex; justify-content: center;
+            align-items: center; font-size: 1.5rem; font-weight: bold;
+            color: var(--ac-brown); cursor: pointer; transition: all 0.2s;
+            user-select: none;
+        }
+        .grid-item:active { transform: scale(0.9); background: var(--ac-mint); color: white; }
+        .grid-item.correct { background: var(--ac-mint); border-color: var(--ac-mint); color: white; cursor: default; }
+        .grid-item.wrong { background: #FFB37E; border-color: #FFB37E; color: white; }
+
+        /* 实时状态提示 */
+        .status-bar { margin-top: 25px; font-size: 0.9rem; font-weight: bold; color: var(--accent-blue); }
+        .timer { font-size: 1.2rem; margin-top: 5px; color: var(--ac-brown); }
+
+        .submit-btn {
+            margin-top: 30px; width: 100%; max-width: 300px; padding: 14px;
+            background: var(--ac-brown); color: white; border: none;
+            border-radius: 15px; font-size: 1rem; font-weight: bold;
+            cursor: pointer; display: none; /* 初始隐藏，完成后显示 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>专注力挑战</h2>
+        <p>请按从 <b>1 到 9</b> 的顺序依次点击方格中的数字<br>我们将评估您在处理简单任务时的注意力稳定性</p>
+    </div>
+
+    <div class="grid-container" id="grid">
+        </div>
+
+    <div class="status-bar" id="status-msg">请找到并点击数字：1</div>
+    <div class="timer" id="timer-display">用时：0.0s</div>
+
+    <button id="submitBtn" class="submit-btn" onclick="doSubmit()">完成并提交</button>
+
+<script>
+    let currentTarget = 1;
+    let startTime = null;
+    let timerInterval = null;
+    const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+    // 初始化：打乱数字顺序并生成网格
+    function initGrid() {
+        const shuffled = [...numbers].sort(() => Math.random() - 0.5);
+        const grid = document.getElementById('grid');
+        shuffled.forEach(num => {
+            const div = document.createElement('div');
+            div.className = 'grid-item';
+            div.innerText = num;
+            div.onclick = () => handleButtonClick(num, div);
+            grid.appendChild(div);
+        });
+    }
+
+    function handleButtonClick(num, element) {
+        if (element.classList.contains('correct')) return;
+
+        // 计时开始
+        if (!startTime) {
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 100);
+        }
+
+        if (num === currentTarget) {
+            element.classList.add('correct');
+            currentTarget++;
+            
+            if (currentTarget > 9) {
+                clearInterval(timerInterval);
+                finishGame();
+            } else {
+                document.getElementById('status-msg').innerText = `非常好！请寻找数字：${currentTarget}`;
+            }
+        } else {
+            // 误触反馈
+            element.classList.add('wrong');
+            setTimeout(() => element.classList.remove('wrong'), 300);
+        }
+    }
+
+    function updateTimer() {
+        const elapsed = (Date.now() - startTime) / 1000;
+        document.getElementById('timer-display').innerText = `用时：${elapsed.toFixed(1)}s`;
+    }
+
+    function finishGame() {
+        const totalTime = (Date.now() - startTime) / 1000;
+        document.getElementById('status-msg').innerText = "挑战完成！";
+        document.getElementById('status-msg').style.color = "#A8D5BA";
+        document.getElementById('submitBtn').style.display = "block";
+        
+        // 计算评分映射：PHQ-9 d7
+        // < 8s: 0分 (注意力极佳)
+        // 8s-15s: 1分 (注意力基本正常)
+        // 15s-25s: 2分 (注意力有明显涣散)
+        // > 25s: 3分 (注意力严重难以集中)
+        let score = 0;
+        if (totalTime >= 8 && totalTime < 15) score = 1;
+        else if (totalTime >= 15 && totalTime < 25) score = 2;
+        else if (totalTime >= 25) score = 3;
+        
+        window.finalScore = score;
+    }
+
+    function doSubmit() {
+        window.parent.postMessage({
+            type: 'experiment_result',
+            eid: 'attention',
+            score: window.finalScore
+        }, '*');
+    }
+
+    initGrid();
+</script>
+</body>
+</html>

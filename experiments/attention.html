@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注意力偏好测试</title>
+    <style>
+        :root {
+            --ac-mint: #A8D5BA; --ac-cream: #FDFaf5; --ac-brown: #5B4636;
+            --ac-sand: #E6D5B8; --accent-blue: #78A2CC;
+        }
+        body {
+            font-family: -apple-system, sans-serif; background-color: #fff;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px; margin: 0; color: var(--ac-brown);
+            user-select: none; /* 防止用户误选文字 */
+        }
+
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; font-size: 1.3rem; color: var(--ac-brown); }
+        .header p { margin: 8px 0; font-size: 0.85rem; color: #888; }
+
+        .grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;
+            width: 95%; max-width: 800px; margin-top: 10px;
+        }
+
+        .img-box {
+            border: 4px solid var(--ac-sand); border-radius: 25px; overflow: hidden;
+            height: 220px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative; background: var(--ac-cream);
+        }
+
+        .img-box:hover { transform: translateY(-8px); border-color: var(--ac-mint); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .img-box img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+        .img-tag {
+            position: absolute; bottom: 10px; background: rgba(255,255,255,0.8);
+            padding: 2px 10px; border-radius: 10px; font-size: 10px; color: var(--ac-brown);
+        }
+
+        #status { margin-top: 25px; font-size: 0.9rem; color: #999; font-weight: bold; height: 1.2em; }
+
+        .finished .img-box { opacity: 0.4; cursor: default; pointer-events: none; }
+        .finished .img-box.selected { opacity: 1; border-color: var(--ac-mint); border-width: 5px; transform: scale(1.05); }
+
+        .submit-btn {
+            margin-top: 25px; background: var(--ac-brown); color: white; border: none;
+            width: 80%; max-width: 300px; padding: 15px; border-radius: 18px;
+            font-size: 1rem; font-weight: bold; cursor: pointer; display: none;
+            transition: background 0.2s;
+        }
+        .submit-btn:active { background: #453529; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>图片偏好选择</h2>
+    <p>请观察下方三张图片，点击一张您此时此刻最有感触的场景</p>
+</div>
+
+<div class="grid" id="experiment-grid">
+    <div class="img-box" data-type="positive" data-id="0">
+        <img src="image_0.png" alt="阳台休息">
+        <div class="img-tag">松弛午后</div>
+    </div>
+    <div class="img-box" data-type="neutral" data-id="1">
+        <img src="image_1.png" alt="便利店购物">
+        <div class="img-tag">日常琐碎</div>
+    </div>
+    <div class="img-box" data-type="negative" data-id="2">
+        <img src="image_2.png" alt="雨天车站">
+        <div class="img-tag">疲惫雨夜</div>
+    </div>
+</div>
+
+<div id="status"> </div>
+<button id="submitBtn" class="submit-btn" onclick="doSubmit()">完成评估并返回</button>
+
+<script>
+    const gridContainer = document.getElementById('experiment-grid');
+    const boxes = document.querySelectorAll('.img-box');
+    const statusEl = document.getElementById('status');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    let trackingData = {
+        positive: 0,
+        neutral: 0,
+        negative: 0,
+        startTime: Date.now(),
+        finalChoice: null
+    };
+
+    let hoverTimer = null;
+    let currentHoverType = null;
+    let finalScore = 0; // 内部变量存储分数
+
+    boxes.forEach(box => {
+        const type = box.getAttribute('data-type');
+
+        box.addEventListener('mouseenter', () => {
+            currentHoverType = type;
+            hoverTimer = Date.now();
+        });
+
+        box.addEventListener('mouseleave', () => {
+            if (hoverTimer && currentHoverType === type) {
+                const duration = Date.now() - hoverTimer;
+                trackingData[type] += duration;
+                hoverTimer = null;
+            }
+        });
+
+        box.addEventListener('click', () => {
+            if (trackingData.finalChoice !== null) return;
+            trackingData.finalChoice = type;
+            
+            // 记录最后一次鼠标停留时长
+            if (hoverTimer) {
+                trackingData[type] += (Date.now() - hoverTimer);
+                hoverTimer = null;
+            }
+            
+            calculateAndFinish(box);
+        });
+    });
+
+    function calculateAndFinish(selectedBox) {
+        statusEl.innerText = "您的选择已记录。";
+        statusEl.style.color = "#A8D5BA";
+        gridContainer.classList.add('finished');
+        selectedBox.classList.add('selected');
+        submitBtn.style.display = "block";
+        
+        // --- 计分逻辑 ---
+        const totalHoverTime = trackingData.positive + trackingData.neutral + trackingData.negative;
+        const negativeBias = trackingData.negative / (totalHoverTime || 1);
+
+        if (trackingData.finalChoice === 'negative') {
+            finalScore = negativeBias > 0.5 ? 3 : 2;
+        } else if (trackingData.finalChoice === 'neutral') {
+            finalScore = negativeBias > 0.3 ? 2 : 1;
+        } else {
+            finalScore = negativeBias > 0.3 ? 1 : 0;
+        }
+
+        console.log("注意力加工分析结果:", trackingData, "计算得分:", finalScore);
+    }
+
+    // --- 核心修改：回传函数 ---
+    function doSubmit() {
+        // 1. 改变按钮状态，防止重复点击
+        submitBtn.innerText = "正在返回...";
+        submitBtn.disabled = true;
+        submitBtn.style.background = "#999";
+
+        // 2. 发送消息给父网页
+        const message = {
+            type: 'experiment_result',
+            eid: 'attention', // 必须与父网页 dimMap 中的 key 一致
+            score: finalScore
+        };
+
+        console.log("向父页面发送数据:", message);
+
+        // 使用 '*' 以确保在开发环境下的兼容性
+        window.parent.postMessage(message, '*');
+    }
+</script>
+
+</body>
+</html>

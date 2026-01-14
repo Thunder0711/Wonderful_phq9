@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>注意力交互实验 - 鼠标追踪版</title>
+    <style>
+        :root { --primary-color: #4a90e2; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f5f7fa; padding: 20px; }
+        #task-container { width: 500px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; position: relative; }
+        .img-box {
+            border: 2px solid #eee; border-radius: 8px; overflow: hidden; height: 150px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: transform 0.2s; position: relative; background: #fafafa;
+        }
+        .img-box:hover { transform: scale(1.02); border-color: var(--primary-color); }
+        .label { position: absolute; bottom: 5px; font-size: 12px; color: #999; pointer-events: none; }
+        #status { margin-top: 15px; font-size: 14px; color: #666; height: 20px; }
+        #result-panel { margin-top: 20px; display: none; text-align: left; background: #eee; padding: 15px; border-radius: 8px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div id="task-container">
+    <h3>注意力灵活性测试</h3>
+    <p style="font-size: 14px; color: #666;">请根据您的第一感觉，点击一张最吸引您的图片</p>
+    
+    <div id="status">准备就绪，请将鼠标移入方格开始...</div>
+
+    <div class="grid" id="experiment-grid">
+        <div class="img-box" data-type="positive" id="img-pos">
+            <span>😊 积极</span>
+            <div class="label">阳光/愉悦</div>
+        </div>
+        <div class="img-box" data-type="neutral" id="img-neu">
+            <span>😐 中性</span>
+            <div class="label">日常/普通</div>
+        </div>
+        <div class="img-box" data-type="negative" id="img-neg">
+            <span>😢 消极</span>
+            <div class="label">低落/悲伤</div>
+        </div>
+        <div class="img-box" data-type="distraction" id="img-dis">
+            <span>😵 混乱</span>
+            <div class="label">压力/焦虑</div>
+        </div>
+    </div>
+
+    <div id="result-panel"></div>
+</div>
+
+<script>
+    const data = {
+        startTime: 0,
+        dwellTimes: { positive: 0, neutral: 0, negative: 0, distraction: 0 },
+        lastEntry: null,
+        entryTimestamp: 0,
+        isStarted: false
+    };
+
+    const grid = document.getElementById('experiment-grid');
+    const boxes = document.querySelectorAll('.img-box');
+    const status = document.getElementById('status');
+    const resultPanel = document.getElementById('result-panel');
+
+    // 记录进入每个区域的时间
+    boxes.forEach(box => {
+        box.addEventListener('mouseenter', (e) => {
+            if(!data.isStarted) {
+                data.startTime = Date.now();
+                data.isStarted = true;
+                status.innerText = "正在记录注意力分布...";
+            }
+            data.lastEntry = box.getAttribute('data-type');
+            data.entryTimestamp = Date.now();
+        });
+
+        box.addEventListener('mouseleave', () => {
+            if(data.lastEntry) {
+                const duration = Date.now() - data.entryTimestamp;
+                data.dwellTimes[data.lastEntry] += duration;
+                data.lastEntry = null;
+            }
+        });
+
+        box.addEventListener('click', () => {
+            finishTask(box.getAttribute('data-type'));
+        });
+    });
+
+    function finishTask(choice) {
+        const totalTime = Date.now() - data.startTime;
+        // 计算负性偏向得分
+        // 公式：(消极时间 + 混乱时间) / 总有效记录时间
+        const negativeTime = data.dwellTimes.negative + data.dwellTimes.distraction;
+        const biasRatio = negativeTime / totalTime;
+
+        let score = 0;
+        if (biasRatio > 0.6 || totalTime > 8000) {
+            score = 3; // 严重偏向或反应极慢
+        } else if (biasRatio > 0.4 || totalTime > 5000) {
+            score = 2;
+        } else if (biasRatio > 0.2) {
+            score = 1;
+        } else {
+            score = 0;
+        }
+
+        // 输出结果符合您之前的 API 格式
+        const output = {
+            s: { d7: score },
+            st: "F",
+            m: `测试完成。你在消极维度的注意力停留占比为 ${(biasRatio * 100).toFixed(1)}%。`,
+            details: {
+                total_duration: totalTime + "ms",
+                dwell_map: data.dwellTimes,
+                final_choice: choice
+            }
+        };
+
+        resultPanel.style.display = 'block';
+        resultPanel.innerText = JSON.stringify(output, null, 2);
+        status.innerText = "测评结束";
+    }
+</script>
+
+</body>
+</html>
